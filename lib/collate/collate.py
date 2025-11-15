@@ -15,9 +15,9 @@ class Collator:
 
         for key in keys:
             if key in self.collate_fn:
-                batch_out | self.collate_fn[key](key, [row[key] for row in batch])
+                batch_out |= self.collate_fn[key](key, [row[key] for row in batch])
                 continue
-            batch_out | {key: [row[key] for row in batch]}
+            batch_out |= {key: [row[key] for row in batch]}
 
         return batch_out | {'length': len(batch)}
     
@@ -30,12 +30,12 @@ class TensorCollator(Collator):
 
         for key, example_value in example_items:
             if key in self.collate_fn:
-                batch_out | self.collate_fn[key](key, [row[key] for row in batch])
+                batch_out |= self.collate_fn[key](key, [row[key] for row in batch])
                 continue
             if isinstance(example_value, torch.Tensor):
-                batch_out | {key: max_pad_sequence([row[key] for row in batch])}
+                batch_out |= {key: max_pad_sequence([row[key] for row in batch])}
                 continue
-            batch_out | {key: [row[key] for row in batch]}
+            batch_out |= {key: [row[key] for row in batch]}
 
         return batch_out | {'length': len(batch)}
 
@@ -52,15 +52,16 @@ class TokenizeCollator:
         batch_out = {}
 
         for key in keys:
+            print(batch_out)
             if key in self.collate_fn:
-                batch_out | self.collate_fn[key](key, [row[key] for row in batch])
+                batch_out |= self.collate_fn[key](key, [row[key] for row in batch])
                 continue
             if key == 'prompts':
-                batch_out | self.tokenizer(
+                batch_out |= self.tokenizer(
                     [row['prompts'] for row in batch], 
                     return_tensors='pt', 
                     padding=True,
                 )
-            batch_out | {key: [row[key] for row in batch]}
+            batch_out |= {key: [row[key] for row in batch]}
 
         return batch_out | {'length': len(batch)}
