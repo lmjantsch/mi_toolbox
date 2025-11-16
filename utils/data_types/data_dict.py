@@ -13,12 +13,12 @@ class DataDict:
         if isinstance(key, str):
             return self.data[key]
         if isinstance(key, slice):
-            return DataDict.from_dict({k:self.data[k][key] for k in self.data})
+            return type(self).from_dict({k:self.data[k][key] for k in self.data})
         if isinstance(key, list):
             if all(isinstance(el, str) for el in key):
-                return DataList.from_dict({key_el: self.data[key_el] for key_el in key})
+                return type(self).from_dict({key_el: self.data[key_el] for key_el in key})
             if all(isinstance(el, int) for el in key):
-                return DataDict.from_dict({k:[self.data[k][key_el] for key_el in key] for k in self.data})
+                return type(self).from_dict({k:[self.data[k][key_el] for key_el in key] for k in self.default_entry})
         raise TypeError(f"Unsupported key type: {type(key)}")
 
     def __len__(self):
@@ -47,6 +47,8 @@ class DataDict:
     @ classmethod
     def from_list(cls, data: List[Dict]):
         obj = cls()
+        if not data:
+            return obj
         obj._set_default_entry(data[0])
         obj.data = {k:[] for k in obj.default_entry.keys()}
         for sample in data:
@@ -71,14 +73,15 @@ class DataDict:
     
     def _add_data(self, data: Dict[str, List]):
         if not self.default_entry:
-            raise AssertionError(f"Please initialize the datalist before adding values")
+            self._set_default_entry({k:v[0] for k,v in data.items()})
+            self.data = {k:[] for k in self.default_entry}
         if not set(data).issubset(self.default_entry):
             raise TypeError(f'Unexpected Keys: {list(set(data) - set(self.default_entry))}')
         num_new_rows = next(len(v) for v in data.values())
         for k, v in data.items():
             if num_new_rows != len(v):
                 raise ValueError(f"The data length of {k} ({len(v)}) does not match the object length ({len(v)})")
-        for k, default_v in self.default_entry:
+        for k, default_v in self.default_entry.items():
             if k not in data:
                 self.data[k].extend([default_v] * num_new_rows)
             else:
@@ -86,7 +89,7 @@ class DataDict:
         self.length += num_new_rows
     
     def _set_default_entry(self, item:Dict):
-        self.default_entry = {k: type(v)() for k, v in item.items()}
+        self.default_entry = {k: type(v)() if v != None else None for k, v in item.items()}
 
     def keys(self):
         return self.default_entry.keys()
@@ -98,7 +101,9 @@ class DataDict:
         return self.data.values()
     
     def to_list(self):
-        return [dict(zip(self.default_entry.keys(), sample)) for sample in zip(*[list(f) for f in self.data.values()])]
+        keys = list(self.keys())
+        cols = [self.data[k] for k in keys]
+        return [dict(zip(keys, row)) for row in zip(*cols)]
         
     def to_dict(self):
         return self.data
