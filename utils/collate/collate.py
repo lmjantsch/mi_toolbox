@@ -52,7 +52,6 @@ class TokenizeCollator:
         batch_out = {}
 
         for key in keys:
-            print(batch_out)
             if key in self.collate_fn:
                 batch_out |= self.collate_fn[key](key, [row[key] for row in batch])
                 continue
