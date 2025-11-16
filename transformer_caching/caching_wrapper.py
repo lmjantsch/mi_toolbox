@@ -63,14 +63,9 @@ def caching_wrapper(
             model_cache = TransformerCache(config)
 
             for batch in batch_iterator(dl):
-                try:
-                    with llm.trace(batch) as tracer:
-                        batch_cache = caching_function(llm, config, batch)
-                    model_cache.extend(batch_cache)
-                finally:
-                    del tracer
-
-            model_cache.stack_tensors()
+                batch_cache = caching_function(llm, config, batch)
+                model_cache.extend(batch_cache)
+            
             big_cache[model_id] = model_cache
 
     return big_cache
