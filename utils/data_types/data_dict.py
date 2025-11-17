@@ -1,11 +1,15 @@
 from typing import Union, List, Dict
+import numpy as np
+import torch
+
+COLUMN_LIKE = (list, np.ndarray, torch.Tensor)
 
 class DataDict:
 
-    def __init__(self):
+    def __init__(self, length=0):
         self.data = {}
         self.default_entry = {}
-        self.length = 0
+        self.length = length
 
     def __getitem__(self, key: Union[int, str, slice]) -> Union['DataDict', List, Dict]:
         if isinstance(key, int):
@@ -14,11 +18,64 @@ class DataDict:
             return self.data[key]
         if isinstance(key, slice):
             return type(self).from_dict({k:self.data[k][key] for k in self.data})
-        if isinstance(key, list):
+        if isinstance(key, COLUMN_LIKE):
             if all(isinstance(el, str) for el in key):
                 return type(self).from_dict({key_el: self.data[key_el] for key_el in key})
             if all(isinstance(el, int) for el in key):
                 return type(self).from_dict({k:[self.data[k][key_el] for key_el in key] for k in self.default_entry})
+            
+            raise TypeError(f"Unsupported key type: {type(key)}[any]")
+        raise TypeError(f"Unsupported key type: {type(key)}")
+    
+    def __setitem__(self, key: Union[int, str, slice], value: any) -> None:
+        if isinstance(key, int):
+            if not isinstance(value, dict):
+                raise TypeError('Expected dictionary for row editing')
+            if not set(value).issubset(self.default_entry):
+                raise TypeError(f'Unexpected Keys: {list(set(value) - set(self.default_entry))}')
+            for value_k, value_v in value.items():
+                self.data[value_k][key] = value_v
+            return
+        if isinstance(key, str):
+            if not isinstance(value, COLUMN_LIKE):
+                raise TypeError("Expected list for column editing")
+            if len(value) != self.length:
+                raise ValueError(f"Length mismatch: The new column has {len(value)} entries, but {self.length} are expected.")
+            self.data[key] = value
+            return
+        if isinstance(key, slice):
+            if not isinstance(value, dict):
+                raise TypeError('Expected dictionary of lists for row slice editing')
+            if not set(value).issubset(self.default_entry):
+                raise TypeError(f'Unexpected Keys: {list(set(value) - set(self.default_entry))}')
+            slice_len = key.stop - key.start
+            for value_k, value_v in value.items():
+                if not isinstance(value_v, COLUMN_LIKE):
+                    raise TypeError('Expected dictionary of lists for row slice editing')
+                if slice_len != len(value_v):
+                    raise ValueError(f"Length mismatch: There are {len(value_v)} entries for column {value_k}, but {slice_len} are expected.")
+            for value_k, value_v in value.items():
+                self.data[value_k][key] = value_v
+            return
+        if isinstance(key, COLUMN_LIKE):
+            if all(isinstance(el, str) for el in key):
+                if not isinstance(value, COLUMN_LIKE):
+                    raise TypeError('Expected list of lists for multi column editing')
+                if len(key) != len(value):
+                    raise TypeError(f'Expected {len(key)} new columns, but {len(value)} are provided.')
+                for key, value in zip(key, value):
+                    self[key] = value
+                return
+            if all(isinstance(el, int) for el in key):
+                if not isinstance(value, COLUMN_LIKE):
+                    raise TypeError('Expected list of dicts for multi row editing')
+                if len(key) != len(value):
+                    raise TypeError(f'Expected {len(key)} new rows, but {len(value)} are provided.')
+                for key_k, value_dict in zip(key, value):
+                    self[key_k] = value_dict
+                return
+
+            raise TypeError(f"Unsupported key type: {type(key)}[any]")
         raise TypeError(f"Unsupported key type: {type(key)}")
 
     def __len__(self):
@@ -45,8 +102,8 @@ class DataDict:
         self.data[key] = data
     
     @ classmethod
-    def from_list(cls, data: List[Dict]):
-        obj = cls()
+    def from_list(cls, data: List[Dict], **kwargs):
+        obj = cls(**kwargs)
         if not data:
             return obj
         obj._set_default_entry(data[0])
@@ -60,8 +117,8 @@ class DataDict:
         return obj
     
     @ classmethod
-    def from_dict(cls, data: Dict[str, List]):
-        obj = cls()
+    def from_dict(cls, data: Dict[str, List], **kwargs):
+        obj = cls(**kwargs)
         obj._set_default_entry({k:v[0] for k,v in data.items()})
         for k in obj.default_entry.keys():
             if not obj.length:
@@ -118,3 +175,8 @@ class DataDict:
             sorting_idx = sorted(list(range(self.length)), key=lambda i: self.data[by_key][i])
             for key in self.default_entry:
                 self.data[key] = [self.data[key][i] for i in sorting_idx]
+
+    def map(self, fn:callable) -> None:
+        for i in range(self.length):
+            row = self[i]
+            self[i] = fn(i, row)
