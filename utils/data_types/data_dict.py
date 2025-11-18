@@ -1,3 +1,5 @@
+import os
+import json
 from typing import Union, List, Dict
 import numpy as np
 import torch
@@ -88,9 +90,15 @@ class DataDict:
         return f"{self.__class__.__name__}(entries={self.length}, keys={self.default_entry.keys()})"
     
     def append(self, data: Dict):
+        if not isinstance(data, dict):
+            raise TypeError(f"Dictionary expected but found {type(data)}.")
         self._add_data({k: [v] for k, v in data.items()})
     
     def extend(self, data: Dict[str, List]):
+        if not isinstance(data, dict):
+            raise TypeError(f"Dictionary of list expected but found {type(data)}.")
+        if not all([isinstance(v, COLUMN_LIKE) for v in data.values()]):
+            raise TypeError(f"All values must be column like (list, ndarray, tensor)")
         self._add_data(data)
 
     def attach(self, key: str, data: List, force: bool=False):
@@ -137,7 +145,7 @@ class DataDict:
         num_new_rows = next(len(v) for v in data.values())
         for k, v in data.items():
             if num_new_rows != len(v):
-                raise ValueError(f"The data length of {k} ({len(v)}) does not match the object length ({len(v)})")
+                raise ValueError(f"The data length of {k} ({len(v)}) does not match the object length ({num_new_rows})")
         for k, default_v in self.default_entry.items():
             if k not in data:
                 self.data[k].extend([default_v] * num_new_rows)
@@ -172,7 +180,7 @@ class DataDict:
         for by_key in reversed(by):
             if by_key not in self.default_entry:
                 raise KeyError(f"The sort key '{by_key}' does not exist in {self.default_entry.keys()}.")
-            sorting_idx = sorted(list(range(self.length)), key=lambda i: self.data[by_key][i])
+            sorting_idx = sorted(list(range(self.length)), key=lambda i: self.data[by_key][i], reverse=descending)
             for key in self.default_entry:
                 self.data[key] = [self.data[key][i] for i in sorting_idx]
 
@@ -180,3 +188,25 @@ class DataDict:
         for i in range(self.length):
             row = self[i]
             self[i] = fn(i, row)
+
+    @ classmethod
+    def load(cls, path: str, keys: List[str], **kwargs) -> 'DataDict':
+        obj = cls(**kwargs)
+        data_dir_files = os.listdir(path)
+        for key in keys:
+
+            if f"{key}.json" in data_dir_files:
+                file_path = os.path.join(path, f"{key}.json")
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+
+            if f"{key}.safetensors" in data_dir_files:
+                file_path  = os.path.join(path, f"{key}.safetensors")
+                data = torch.load(file_path)
+            
+            if not obj.length:
+                obj.length = len(data)
+
+            obj.attach(key, data)
+        
+        return obj
