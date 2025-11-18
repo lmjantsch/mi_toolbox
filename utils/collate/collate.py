@@ -48,11 +48,11 @@ class TensorCollator(Collator):
 
         
 
-class TokenizeCollator:
+class TokenizeCollator(Collator):
 
     def __init__(self, tokenizer: AutoTokenizer, collate_fn: Dict[str, callable] = None):
         self.tokenizer = tokenizer
-        self.super().__init__(collate_fn)
+        super().__init__(collate_fn)
 
     def __call__(self, batch:List[Dict]) -> Dict:
         keys = batch[0].keys()
