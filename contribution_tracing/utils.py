@@ -15,3 +15,6 @@ def get_top_x_contribution_values(contributions: torch.Tensor, top_x: float) -> 
     filtered_contributions = filtered_values.gather(-1, inversed_idx)
 
     return filtered_contributions
+
+def mean_center_tensor(tensor: torch.Tensor) -> torch.Tensor:
+    return tensor - tensor.mean(dim=-1, keepdim=True)
