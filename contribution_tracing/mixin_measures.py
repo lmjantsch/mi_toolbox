@@ -1,6 +1,8 @@
 import torch
 from typing import Union
 
+from .utils import is_broadcastable
+
 def get_dot_prod_contribution(parts: torch.Tensor, whole: torch.Tensor, device: Union[str, torch.device] = None) -> torch.Tensor:
     whole_sh = whole.shape
     parts_sh = parts.shape
@@ -8,8 +10,12 @@ def get_dot_prod_contribution(parts: torch.Tensor, whole: torch.Tensor, device: 
     
     if batch_dims < 0:
         raise ValueError(f"The 'parts' {tuple(parts_sh)} must have at least the same number of dimensions as the 'whole' {tuple(whole_sh)}")
-    if parts_sh[batch_dims:] != whole_sh:
-        raise ValueError(f"The non-batrch shape of 'parts' {tuple(parts_sh[batch_dims:])} must be the same as the shape of 'whole' {tuple(whole_sh)}")
+    
+    if whole_sh[-1] != parts_sh[-1]:
+        raise ValueError(f"The reduction dimension of 'parts' {tuple(parts_sh)} and 'whole' {tuple(whole_sh)} must be the same.")
+    
+    if not is_broadcastable(parts_sh, whole_sh):
+        raise ValueError(f"The 'parts' tensor {tuple(parts_sh)} and 'whole' tensor {tuple(whole_sh)} are not broadcastable.")
     
     dot_prod = (parts * whole).sum(-1)
     return dot_prod
