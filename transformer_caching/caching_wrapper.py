@@ -26,6 +26,9 @@ def load_nnsight_model(
     )
     try:
         yield llm, llm.config
+    except Exception as e:
+        print('loader')
+        raise e
     finally:
         llm.cpu()
         del llm
@@ -40,9 +43,12 @@ def batch_iterator(dl: DataLoader) -> Iterator[Dict, ]:
         start_time = time.perf_counter()
         try:
             yield batch
+        except Exception as e:
+            print('iterator')
+            raise e
         finally:
             end_time = time.perf_counter()
-            print(f"Batch {batch_id + 1}/{len(dl)}: {(end_time - start_time):.2f} seconds")
+            # print(f"Batch {batch_id + 1}/{len(dl)}: {(end_time - start_time):.2f} seconds")
 
 
 @torch.no_grad()
@@ -54,18 +60,17 @@ def caching_wrapper(
         device: Union[str, torch.device]='auto',
 ):
     big_cache = {}
-
     if isinstance(model_ids, str):
         model_ids = [model_ids]
 
-    for model_id in model_ids: 
+    for model_id in model_ids:
         with load_nnsight_model(model_id, dtype, device) as (llm, config):
             model_cache = TransformerCache(config)
 
             for batch in batch_iterator(dl):
                 batch_cache = caching_function(llm, config, batch)
                 model_cache.extend(batch_cache)
-            
+
             big_cache[model_id] = model_cache
 
     return big_cache

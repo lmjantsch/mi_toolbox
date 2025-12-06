@@ -143,6 +143,8 @@ class DataDict:
         if not set(data).issubset(self.default_entry):
             raise TypeError(f'Unexpected Keys: {list(set(data) - set(self.default_entry))}')
         num_new_rows = next(len(v) for v in data.values())
+        if num_new_rows == 0:
+            return
         for k, v in data.items():
             if num_new_rows != len(v):
                 raise ValueError(f"The data length of {k} ({len(v)}) does not match the object length ({num_new_rows})")
