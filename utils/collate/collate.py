@@ -1,73 +1,83 @@
-from transformers import AutoTokenizer
-from typing import List, Dict
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
+from typing import List, Dict, Callable, Any
 import torch
 
 from .utils import max_pad_sequence
 
 class Collator:
+    def __init__(self, collate_fn: Dict[str, Callable[[str, List[Any]], Dict]] = None):
+        self.collate_fn = collate_fn or {}
 
-    def __init__(self, collate_fn: Dict[str, callable] = None):
-        self.collate_fn = collate_fn
-
-    def __call__(self, batch:List[Dict]) -> Dict:
+    def __call__(self, batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not batch:
+            return {}
+            
         keys = batch[0].keys()
         batch_out = {}
 
         for key in keys:
-            if self.collate_fn and key in self.collate_fn:
-                batch_out |= self.collate_fn[key](key, [row[key] for row in batch])
-                continue
-            batch_out |= {key: [row[key] for row in batch]}
+            column_data = [row[key] for row in batch]
 
-        return batch_out | {'length': len(batch)}
+            if key in self.collate_fn:
+                batch_out.update(self.collate_fn[key](key, column_data))
+                continue
+            
+            processed_data = self.process_column(key, column_data)
+            
+            if isinstance(processed_data, dict):
+                batch_out.update(processed_data)
+            else:
+                batch_out[key] = processed_data
+
+        batch_out['length'] = len(batch)
+        return batch_out
+    
+    def process_column(self, key: str, data: List[Any]) -> Any:
+        """
+        Overridable method for default column processing.
+        Returns either the value to be assigned to 'key', or a dict to merge.
+        """
+        return data
     
 
 class TensorCollator(Collator):
-
-    def __init__(self, collate_fn: Dict[str, callable] = None, padding: bool = False):
-        self.padding = padding
+    def __init__(self, collate_fn: Dict[str, Callable] = None, padding: bool = False, padding_value: int = 0):
         super().__init__(collate_fn)
+        self.padding = padding
+        self.padding_value = padding_value
 
-    def __call__(self, batch:List[Dict]) -> Dict:
-        example_items = batch[0].items()
-        batch_out = {}
-
-        for key, example_value in example_items:
-            if self.collate_fn and key in self.collate_fn:
-                batch_out |= self.collate_fn[key](key, [row[key] for row in batch])
-                continue
-            if isinstance(example_value, torch.Tensor):
-                if self.padding:
-                    batch_out |= {key: max_pad_sequence([row[key] for row in batch])}
-                    continue
-                batch_out |= {key: torch.stack([row[key] for row in batch])}
-                continue
-            batch_out |= {key: [row[key] for row in batch]}
-
-        return batch_out | {'length': len(batch)}
+    def process_column(self, key: str, data: List[Any]) -> Any:
+        if data and isinstance(data[0], torch.Tensor):
+            if self.padding:
+                return max_pad_sequence(data, padding_value=self.padding_value)
+            return torch.stack(data)
+        
+        return data
 
         
 
-class TokenizeCollator(Collator):
-
-    def __init__(self, tokenizer: AutoTokenizer, collate_fn: Dict[str, callable] = None):
+class TokenizeCollator(TensorCollator):
+    """
+    Extends TensorCollator to handle tokenization, then falls back to Tensor logic
+    for other columns (stacking/padding).
+    """
+    def __init__(
+        self, 
+        tokenizer: PreTrainedTokenizerBase, 
+        text_key: str = 'prompts', 
+        collate_fn: Dict[str, Callable] = None,
+        padding: bool = True
+    ):
+        super().__init__(collate_fn, padding=padding) 
         self.tokenizer = tokenizer
-        super().__init__(collate_fn)
+        self.text_key = text_key
 
-    def __call__(self, batch:List[Dict]) -> Dict:
-        keys = batch[0].keys()
-        batch_out = {}
-
-        for key in keys:
-            if self.collate_fn and key in self.collate_fn:
-                batch_out |= self.collate_fn[key](key, [row[key] for row in batch])
-                continue
-            if key == 'prompts':
-                batch_out |= self.tokenizer(
-                    [row['prompts'] for row in batch], 
-                    return_tensors='pt', 
-                    padding=True,
-                )
-            batch_out |= {key: [row[key] for row in batch]}
-
-        return batch_out | {'length': len(batch)}
+    def process_column(self, key: str, data: List[Any]) -> Any:
+        if key == self.text_key:
+            return self.tokenizer(
+                data,
+                return_tensors='pt',
+                padding=True,
+                truncation=True 
+            )
+        return super().process_column(key, data)
