@@ -355,10 +355,17 @@ class DataDict:
             
             valid_results = [r for r in results if r is not None]
             return self.from_list(valid_results)
-        
+    
     def save(self, path: str) -> None:
         """
         Saves columns to disk.
+        Delegates actual saving to _save method for inheritance support.
+        """
+        self._save(path)
+
+    def _save(self, path: str) -> None:
+        """
+        Internal implementation of save.
         - Tensors and NumPy arrays are saved as .pt
         - Lists are saved as .json
         """
@@ -394,6 +401,17 @@ class DataDict:
             keys: List of column names to look for.
         """
         obj = cls()
+        loaded_data = cls._load(path, keys)
+        if loaded_data:
+            obj._add_data(loaded_data)
+        return obj
+
+    @classmethod
+    def _load(cls, path: str, keys: List[str]) -> Dict[str, ColumnType]:
+        """
+        Internal implementation of load.
+        Returns a dictionary of loaded data.
+        """
         if not os.path.exists(path):
              raise FileNotFoundError(f"Path not found: {path}")
              
@@ -409,8 +427,5 @@ class DataDict:
             if f"{key}.pt" in data_dir_files:
                 loaded_data[key] = torch.load(os.path.join(path, f"{key}.pt"))
                 continue
-
-        if loaded_data:
-            obj._add_data(loaded_data)
         
-        return obj
+        return loaded_data
