@@ -2,8 +2,8 @@ import torch
 from transformers import PretrainedConfig, AutoConfig
 from typing import Optional, List
 
-from mi_toolbox.utils.collate.utils import max_pad_sequence
-from mi_toolbox.utils.data_types import DataDict
+from ..collate.utils import max_pad_sequence
+from .data_dict import DataDict
 
 class TransformerCache(DataDict):
 

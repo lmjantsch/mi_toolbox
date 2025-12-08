@@ -1,2 +1,4 @@
 #Folders
 __pycache__
+.pytest_cache
+mi_toolbox.egg-info

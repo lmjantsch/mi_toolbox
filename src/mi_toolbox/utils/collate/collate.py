@@ -1,6 +1,7 @@
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 from typing import List, Dict, Callable, Any
 import torch
+from collections import UserDict
 
 from .utils import max_pad_sequence
 
@@ -24,7 +25,7 @@ class Collator:
             
             processed_data = self.process_column(key, column_data)
             
-            if isinstance(processed_data, dict):
+            if isinstance(processed_data, (dict, UserDict)):
                 batch_out.update(processed_data)
             else:
                 batch_out[key] = processed_data
